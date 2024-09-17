@@ -1,3 +1,4 @@
+pip install streamlit google-generativeai PyPDF2 python-dotenv textblob nltk language_tool_python
 import streamlit as st
 import google.generativeai as genai
 import os
@@ -9,7 +10,7 @@ from textblob.exceptions import MissingCorpusError
 import nltk
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import language_tool_python
+import importlib
 
 # Function to download NLTK corpora
 def download_nltk_corpora():
@@ -25,6 +26,13 @@ load_dotenv()
 
 # Configure Google Generative AI
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+
+# Try importing language_tool_python
+language_tool_installed = importlib.util.find_spec("language_tool_python") is not None
+if language_tool_installed:
+    import language_tool_python
+else:
+    st.error("language_tool_python is not installed. Please install it using 'pip install language_tool_python'.")
 
 def get_gemini_response(input_text):
     model = genai.GenerativeModel('gemini-pro')
@@ -43,9 +51,9 @@ def input_pdf_text(uploaded_file):
         return None
 
 def analyze_text_mistakes(text, lang):
+    mistakes = []
     if lang == 'en':
         blob = TextBlob(text)
-        mistakes = []
         try:
             for sentence in blob.sentences:
                 corrections = sentence.correct()
@@ -58,10 +66,9 @@ def analyze_text_mistakes(text, lang):
                     })
         except MissingCorpusError:
             st.error("TextBlob corpus missing. Please ensure the necessary corpora are downloaded.")
-    elif lang == 'fr':
+    elif lang == 'fr' and language_tool_installed:
         tool = language_tool_python.LanguageTool('fr')
         matches = tool.check(text)
-        mistakes = []
         for match in matches:
             mistakes.append({
                 "error": match.ruleId,
@@ -80,7 +87,6 @@ def calculate_match(cv_text, job_description_text, method):
         vectors = vectorizer.toarray()
         cosine_sim = cosine_similarity([vectors[0]], [vectors[1]])
         return cosine_sim[0][0] * 100
-    # Add custom matching methods if needed
     return 0
 
 def get_keywords_and_match(cv_text, job_description_text, method):
