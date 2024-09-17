@@ -4,6 +4,10 @@ import os
 import PyPDF2 as pdf
 from dotenv import load_dotenv
 from textblob import TextBlob
+import nltk
+
+# Download NLTK corpora
+nltk.download('punkt')
 
 # Load environment variables
 load_dotenv()
