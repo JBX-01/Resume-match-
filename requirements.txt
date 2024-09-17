@@ -3,7 +3,6 @@ google-generativeai
 PyPDF2
 python-dotenv
 textblob
-nltk
 scikit-learn
-importlib-metadata
 languagetool
+nltk
