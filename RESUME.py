@@ -4,12 +4,15 @@ import os
 import PyPDF2 as pdf
 from dotenv import load_dotenv
 import json
-from textblob import TextBlob
+from textblob import TextBlob, download_corpora
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
 
 # Load environment variables
 load_dotenv()
+
+# Download TextBlob corpora
+download_corpora()
 
 # Configure Google Generative AI
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
