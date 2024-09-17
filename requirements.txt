@@ -4,5 +4,6 @@ PyPDF2
 python-dotenv
 textblob
 nltk
-language_tool_python
 scikit-learn
+importlib-metadata
+language-tool-python
