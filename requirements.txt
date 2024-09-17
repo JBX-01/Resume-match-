@@ -1,7 +1,8 @@
 streamlit
 google-generativeai
-python-dotenv
 PyPDF2
+python-dotenv
 textblob
-scikit-learn
 nltk
+language_tool_python
+scikit-learn
