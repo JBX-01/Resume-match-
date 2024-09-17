@@ -3,9 +3,8 @@ import google.generativeai as genai
 import os
 import PyPDF2 as pdf
 from dotenv import load_dotenv
-import json
 import language_tool_python
-from shutil import which as find_executable  # Updated for Python 3.12 compatibility
+from shutil import which as find_executable
 
 # Load environment variables
 load_dotenv()
