@@ -4,15 +4,23 @@ import os
 import PyPDF2 as pdf
 from dotenv import load_dotenv
 import json
-from textblob import TextBlob, download_corpora
+from textblob import TextBlob
+import nltk
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+import language_tool_python
 
 # Load environment variables
 load_dotenv()
 
-# Download TextBlob corpora
-download_corpora()
+# Ensure that the required NLTK corpora are downloaded
+def download_nltk_corpora():
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        nltk.download('punkt')
+
+download_nltk_corpora()
 
 # Configure Google Generative AI
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -33,7 +41,8 @@ def input_pdf_text(uploaded_file):
         st.error(f"Erreur lors du traitement du fichier : {e}")
         return None
 
-def analyze_text_mistakes(text, lang):
+# Text mistake analysis using TextBlob
+def analyze_text_mistakes_textblob(text):
     blob = TextBlob(text)
     mistakes = []
     for sentence in blob.sentences:
@@ -47,19 +56,45 @@ def analyze_text_mistakes(text, lang):
             })
     return mistakes
 
+# Text mistake analysis using LanguageTool
+def analyze_text_mistakes_languagetool(text):
+    tool = language_tool_python.LanguageTool('en-US')
+    matches = tool.check(text)
+    mistakes = []
+    for match in matches:
+        mistakes.append({
+            "error": match.ruleId,
+            "message": match.message,
+            "suggestions": match.replacements,
+            "context": match.context
+        })
+    return mistakes
+
 def extract_keywords(text):
     return set(text.lower().split())
 
-def calculate_match(cv_text, job_description_text):
+def calculate_match_cv_vs_job(cv_text, job_description_text):
     vectorizer = CountVectorizer().fit_transform([cv_text, job_description_text])
     vectors = vectorizer.toarray()
     cosine_sim = cosine_similarity([vectors[0]], [vectors[1]])
     return cosine_sim[0][0] * 100
 
-def get_keywords_and_match(cv_text, job_description_text):
+def calculate_match_cv_vs_job_custom(cv_text, job_description_text):
+    # Example custom matching logic
+    # You can replace this with your preferred matching algorithm
+    cv_keywords = extract_keywords(cv_text)
+    job_keywords = extract_keywords(job_description_text)
+    common_keywords = cv_keywords.intersection(job_keywords)
+    match_percentage = len(common_keywords) / len(job_keywords) * 100
+    return match_percentage
+
+def get_keywords_and_match(cv_text, job_description_text, method):
     keywords_cv = extract_keywords(cv_text)
     keywords_job = extract_keywords(job_description_text)
-    match_percentage = calculate_match(cv_text, job_description_text)
+    if method == 'Standard':
+        match_percentage = calculate_match_cv_vs_job(cv_text, job_description_text)
+    else:
+        match_percentage = calculate_match_cv_vs_job_custom(cv_text, job_description_text)
     return keywords_cv, keywords_job, match_percentage
 
 # Streamlit App
@@ -69,6 +104,10 @@ st.text("Améliorez votre CV pour l'ATS et corrigez les fautes")
 # Language choice
 lang_choice = st.selectbox("Choisissez la langue de l'analyse", options=["Français", "English"])
 lang_code = 'fr' if lang_choice == "Français" else 'en'
+
+# Method choices
+mistake_analysis_method = st.selectbox("Choisissez la méthode d'analyse des fautes", options=["TextBlob", "LanguageTool"])
+matching_method = st.selectbox("Choisissez la méthode de correspondance", options=["Standard", "Custom"])
 
 # Prompt choice based on language
 input_prompt_en = """
@@ -119,13 +158,17 @@ if submit:
         if resume_text:
             # Text mistake analysis
             st.subheader("Analyse des fautes de texte" if lang_choice == "Français" else "Text Mistakes Analysis")
-            mistakes = analyze_text_mistakes(resume_text, lang_code)
+            if mistake_analysis_method == "TextBlob":
+                mistakes = analyze_text_mistakes_textblob(resume_text)
+            else:
+                mistakes = analyze_text_mistakes_languagetool(resume_text)
+                
             if mistakes:
                 for mistake in mistakes:
                     st.write(f"Erreur : {mistake['error']}" if lang_choice == "Français" else f"Error: {mistake['error']}")
                     st.write(f"Message : {mistake['message']}" if lang_choice == "Français" else f"Message: {mistake['message']}")
                     st.write(f"Suggestions : {', '.join(mistake['suggestions'])}" if lang_choice == "Français" else f"Suggestions: {', '.join(mistake['suggestions'])}")
-                    st.write(f"Contexte : {mistake['context']}" if lang_choice == "Français" else f"Context: {mistake['context']}")
+                    st.write(f"Contexte : {mistake['context']}" if lang_code == "fr" else f"Context: {mistake['context']}")
                     st.write("---")
             else:
                 st.success("Aucune faute détectée !" if lang_choice == "Français" else "No grammar or spelling mistakes detected!")
@@ -138,7 +181,7 @@ if submit:
                 st.write(response)
             
             # Calculate and display match percentage
-            keywords_cv, keywords_job, match_percentage = get_keywords_and_match(resume_text, jd)
+            keywords_cv, keywords_job, match_percentage = get_keywords_and_match(resume_text, jd, matching_method)
             st.subheader("Match entre CV et Offre d'emploi" if lang_choice == "Français" else "CV and Job Offer Match")
             st.write(f"Pourcentage de correspondance : {match_percentage:.2f}%")
             st.write(f"Keywords in CV: {keywords_cv}")
