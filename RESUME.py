@@ -3,8 +3,7 @@ import google.generativeai as genai
 import os
 import PyPDF2 as pdf
 from dotenv import load_dotenv
-import language_tool_python
-from shutil import which as find_executable
+from textblob import TextBlob
 
 # Load environment variables
 load_dotenv()
@@ -28,8 +27,23 @@ def input_pdf_text(uploaded_file):
             text += str(page.extract_text())
         return text
     except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier : {e}")
+        st.error(f"Error processing file: {e}")
         return None
+
+# Text Mistakes Analyzer Function using TextBlob
+def analyze_text_mistakes(text):
+    blob = TextBlob(text)
+    mistakes = []
+    for sentence in blob.sentences:
+        # Check for spelling mistakes
+        for word, correction in sentence.correct()._corrected_word:
+            mistakes.append({
+                "error": "Spelling",
+                "message": f"Suggested correction: {correction}",
+                "suggestions": [correction],
+                "context": sentence.string
+            })
+    return mistakes
 
 # Prompts in English and French
 input_prompt_en = """
@@ -62,27 +76,13 @@ Je veux que la réponse soit sous forme d'une seule chaîne de caractères avec 
 {{"Correspondance JD": "%", "MotsClésManquants": [], "RésuméProfil": ""}}
 """
 
-# Text Mistakes Analyzer Function
-def analyze_text_mistakes(text, lang):
-    tool = language_tool_python.LanguageTool(lang)  # 'en-US' for English, 'fr' for French
-    matches = tool.check(text)
-    mistakes = []
-    for match in matches:
-        mistakes.append({
-            "error": match.ruleId,
-            "message": match.message,
-            "suggestions": match.replacements,
-            "context": match.context
-        })
-    return mistakes
-
 # Streamlit App
 st.title("Smart ATS avec Analyse des Fautes")
 st.text("Améliorez votre CV pour l'ATS et corrigez les fautes")
 
 # Language choice
 lang_choice = st.selectbox("Choisissez la langue de l'analyse", options=["Français", "English"])
-lang_code = 'fr' if lang_choice == "Français" else 'en-US'
+lang_code = 'fr' if lang_choice == "Français" else 'en'
 
 # Prompt choice based on language
 if lang_choice == "Français":
@@ -103,7 +103,7 @@ if submit:
         if resume_text:
             # Text mistake analysis
             st.subheader("Analyse des fautes de texte" if lang_choice == "Français" else "Text Mistakes Analysis")
-            mistakes = analyze_text_mistakes(resume_text, lang_code)
+            mistakes = analyze_text_mistakes(resume_text)
             if mistakes:
                 for mistake in mistakes:
                     st.write(f"Erreur : {mistake['error']}" if lang_choice == "Français" else f"Error: {mistake['error']}")
