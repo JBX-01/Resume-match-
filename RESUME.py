@@ -5,20 +5,10 @@ import PyPDF2 as pdf
 from dotenv import load_dotenv
 import json
 from textblob import TextBlob
-from textblob.exceptions import MissingCorpusError
-import nltk
 from sklearn.feature_extraction.text import CountVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
-import importlib
-
-# Function to download NLTK corpora
-def download_nltk_corpora():
-    try:
-        nltk.data.find('tokenizers/punkt')
-    except LookupError:
-        nltk.download('punkt')
-
-download_nltk_corpora()
+import languagetool
+import nltk
 
 # Load environment variables
 load_dotenv()
@@ -26,12 +16,14 @@ load_dotenv()
 # Configure Google Generative AI
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# Try importing language_tool_python
-language_tool_installed = importlib.util.find_spec("language_tool_python") is not None
-if language_tool_installed:
-    import language_tool_python
-else:
-    st.error("language_tool_python is not installed. Please install it using 'pip install language_tool_python'.")
+# Download NLTK corpora
+def download_nltk_corpora():
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        nltk.download('punkt')
+
+download_nltk_corpora()
 
 def get_gemini_response(input_text):
     model = genai.GenerativeModel('gemini-pro')
@@ -46,64 +38,44 @@ def input_pdf_text(uploaded_file):
             text += page.extract_text() or ""
         return text
     except Exception as e:
-        st.error(f"Error processing file: {e}")
+        st.error(f"Erreur lors du traitement du fichier : {e}")
         return None
 
 def analyze_text_mistakes(text, lang):
+    tool = languagetool.LanguageTool(lang)
+    matches = tool.check(text)
     mistakes = []
-    if lang == 'en':
-        blob = TextBlob(text)
-        try:
-            for sentence in blob.sentences:
-                corrections = sentence.correct()
-                if corrections != sentence:
-                    mistakes.append({
-                        "error": "Grammar Issue",
-                        "message": f"Suggested correction: {corrections}",
-                        "suggestions": [],
-                        "context": sentence
-                    })
-        except MissingCorpusError:
-            st.error("TextBlob corpus missing. Please ensure the necessary corpora are downloaded.")
-    elif lang == 'fr' and language_tool_installed:
-        tool = language_tool_python.LanguageTool('fr')
-        matches = tool.check(text)
-        for match in matches:
-            mistakes.append({
-                "error": match.ruleId,
-                "message": match.message,
-                "suggestions": match.replacements,
-                "context": text[match.offset:match.offset + match.errorLength]
-            })
+    for match in matches:
+        mistakes.append({
+            "error": match.ruleId,
+            "message": match.message,
+            "suggestions": [rep.value for rep in match.replacements],
+            "context": match.context
+        })
     return mistakes
 
 def extract_keywords(text):
     return set(text.lower().split())
 
-def calculate_match(cv_text, job_description_text, method):
-    if method == 'Standard':
-        vectorizer = CountVectorizer().fit_transform([cv_text, job_description_text])
-        vectors = vectorizer.toarray()
-        cosine_sim = cosine_similarity([vectors[0]], [vectors[1]])
-        return cosine_sim[0][0] * 100
-    return 0
+def calculate_match(cv_text, job_description_text):
+    vectorizer = CountVectorizer().fit_transform([cv_text, job_description_text])
+    vectors = vectorizer.toarray()
+    cosine_sim = cosine_similarity([vectors[0]], [vectors[1]])
+    return cosine_sim[0][0] * 100
 
-def get_keywords_and_match(cv_text, job_description_text, method):
+def get_keywords_and_match(cv_text, job_description_text):
     keywords_cv = extract_keywords(cv_text)
     keywords_job = extract_keywords(job_description_text)
-    match_percentage = calculate_match(cv_text, job_description_text, method)
+    match_percentage = calculate_match(cv_text, job_description_text)
     return keywords_cv, keywords_job, match_percentage
 
 # Streamlit App
-st.title("Smart ATS with Mistake Analysis")
-st.text("Improve your resume for ATS and correct mistakes")
+st.title("Smart ATS avec Analyse des Fautes")
+st.text("Améliorez votre CV pour l'ATS et corrigez les fautes")
 
 # Language choice
-lang_choice = st.selectbox("Choose the language for analysis", options=["English", "Français"])
-lang_code = 'en' if lang_choice == "English" else 'fr'
-
-# Analysis method choice
-analysis_method = st.selectbox("Choose the analysis method", options=["Standard", "Custom"])
+lang_choice = st.selectbox("Choisissez la langue de l'analyse", options=["Français", "English"])
+lang_code = 'fr' if lang_choice == "Français" else 'en'
 
 # Prompt choice based on language
 input_prompt_en = """
@@ -141,10 +113,10 @@ if lang_choice == "Français":
 else:
     input_prompt = input_prompt_en
 
-jd = st.text_area("Paste the Job Description" if lang_choice == "English" else "Collez la description de l'offre d'emploi")
-uploaded_file = st.file_uploader("Upload Your Resume (PDF)" if lang_choice == "English" else "Téléchargez votre CV (PDF)", type="pdf")
+jd = st.text_area("Collez la description de l'offre d'emploi" if lang_choice == "Français" else "Paste the Job Description")
+uploaded_file = st.file_uploader("Téléchargez votre CV (PDF)" if lang_choice == "Français" else "Upload Your Resume (PDF)", type="pdf")
 
-submit = st.button("Submit" if lang_choice == "English" else "Soumettre")
+submit = st.button("Soumettre" if lang_choice == "Français" else "Submit")
 
 if submit:
     if jd and uploaded_file is not None:
@@ -153,32 +125,32 @@ if submit:
         
         if resume_text:
             # Text mistake analysis
-            st.subheader("Text Mistakes Analysis" if lang_choice == "English" else "Analyse des fautes de texte")
+            st.subheader("Analyse des fautes de texte" if lang_choice == "Français" else "Text Mistakes Analysis")
             mistakes = analyze_text_mistakes(resume_text, lang_code)
             if mistakes:
                 for mistake in mistakes:
-                    st.write(f"Error: {mistake['error']}" if lang_choice == "English" else f"Erreur : {mistake['error']}")
-                    st.write(f"Message: {mistake['message']}" if lang_choice == "English" else f"Message : {mistake['message']}")
-                    st.write(f"Suggestions: {', '.join(mistake['suggestions'])}" if lang_choice == "English" else f"Suggestions : {', '.join(mistake['suggestions'])}")
-                    st.write(f"Context: {mistake['context']}" if lang_choice == "English" else f"Contexte : {mistake['context']}")
+                    st.write(f"Erreur : {mistake['error']}" if lang_choice == "Français" else f"Error: {mistake['error']}")
+                    st.write(f"Message : {mistake['message']}" if lang_choice == "Français" else f"Message: {mistake['message']}")
+                    st.write(f"Suggestions : {', '.join(mistake['suggestions'])}" if lang_choice == "Français" else f"Suggestions: {', '.join(mistake['suggestions'])}")
+                    st.write(f"Contexte : {mistake['context']}" if lang_choice == "Français" else f"Context: {mistake['context']}")
                     st.write("---")
             else:
-                st.success("No grammar or spelling mistakes detected!" if lang_choice == "English" else "Aucune faute détectée !")
+                st.success("Aucune faute détectée !" if lang_choice == "Français" else "No grammar or spelling mistakes detected!")
 
             # ATS response via Gemini
             input_prompt_filled = input_prompt.format(text=resume_text, jd=jd)
-            with st.spinner('Processing resume...' if lang_choice == "English" else 'Traitement en cours...'):
+            with st.spinner('Traitement en cours...' if lang_choice == "Français" else 'Processing resume...'):
                 response = get_gemini_response(input_prompt_filled)
-                st.subheader("ATS Evaluation" if lang_choice == "English" else "Évaluation ATS")
+                st.subheader("Évaluation ATS" if lang_choice == "Français" else "ATS Evaluation")
                 st.write(response)
             
             # Calculate and display match percentage
-            keywords_cv, keywords_job, match_percentage = get_keywords_and_match(resume_text, jd, analysis_method)
-            st.subheader("CV and Job Offer Match" if lang_choice == "English" else "Match entre CV et Offre d'emploi")
-            st.write(f"Match Percentage: {match_percentage:.2f}%" if lang_choice == "English" else f"Pourcentage de correspondance : {match_percentage:.2f}%")
+            keywords_cv, keywords_job, match_percentage = get_keywords_and_match(resume_text, jd)
+            st.subheader("Match entre CV et Offre d'emploi" if lang_choice == "Français" else "CV and Job Offer Match")
+            st.write(f"Pourcentage de correspondance : {match_percentage:.2f}%")
             st.write(f"Keywords in CV: {keywords_cv}")
             st.write(f"Keywords in Job Description: {keywords_job}")
         else:
-            st.error("Failed to extract text from the PDF." if lang_choice == "English" else "Échec de l'extraction du texte du PDF.")
+            st.error("Échec de l'extraction du texte du PDF." if lang_choice == "Français" else "Failed to extract text from the PDF.")
     else:
-        st.error("Please provide both the job description and a resume." if lang_choice == "English" else "Veuillez fournir à la fois la description de l'emploi et un CV.")
+        st.error("Veuillez fournir à la fois la description de l'emploi et un CV." if lang_choice == "Français" else "Please provide both the job description and a resume.")
