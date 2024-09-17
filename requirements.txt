@@ -3,4 +3,4 @@ google-generativeai
 python-dotenv
 PyPDF2
 textblob
-nltk
+scikit-learn
