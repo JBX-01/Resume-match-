@@ -6,4 +6,4 @@ textblob
 nltk
 scikit-learn
 importlib-metadata
-language-tool-python
+languagetool
