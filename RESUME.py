@@ -1,20 +1,25 @@
-import streamlit as st 
+import streamlit as st
 import google.generativeai as genai
 import os
 import PyPDF2 as pdf
 from dotenv import load_dotenv
 import json
 import language_tool_python
+from shutil import which as find_executable  # Updated for Python 3.12 compatibility
 
-load_dotenv()  # Charger toutes les variables d'environnement
+# Load environment variables
+load_dotenv()
 
+# Configure Google Generative AI
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
+# Function to get the Gemini response
 def get_gemini_response(input):
     model = genai.GenerativeModel('gemini-pro')
     response = model.generate_content(input)
     return response.text
 
+# Function to extract text from uploaded PDF file
 def input_pdf_text(uploaded_file):
     try:
         reader = pdf.PdfReader(uploaded_file)
@@ -76,11 +81,11 @@ def analyze_text_mistakes(text, lang):
 st.title("Smart ATS avec Analyse des Fautes")
 st.text("Améliorez votre CV pour l'ATS et corrigez les fautes")
 
-# Choix de la langue
+# Language choice
 lang_choice = st.selectbox("Choisissez la langue de l'analyse", options=["Français", "English"])
 lang_code = 'fr' if lang_choice == "Français" else 'en-US'
 
-# Choix de prompt en fonction de la langue
+# Prompt choice based on language
 if lang_choice == "Français":
     input_prompt = input_prompt_fr
 else:
@@ -93,11 +98,11 @@ submit = st.button("Soumettre" if lang_choice == "Français" else "Submit")
 
 if submit:
     if jd and uploaded_file is not None:
-        # Extraction du texte du PDF téléchargé
+        # Extract text from the uploaded PDF
         resume_text = input_pdf_text(uploaded_file)
         
         if resume_text:
-            # Analyse des fautes de texte
+            # Text mistake analysis
             st.subheader("Analyse des fautes de texte" if lang_choice == "Français" else "Text Mistakes Analysis")
             mistakes = analyze_text_mistakes(resume_text, lang_code)
             if mistakes:
@@ -110,7 +115,7 @@ if submit:
             else:
                 st.success("Aucune faute détectée !" if lang_choice == "Français" else "No grammar or spelling mistakes detected!")
 
-            # Réponse de l'ATS via Gemini
+            # ATS response via Gemini
             input_prompt_filled = input_prompt.format(text=resume_text, jd=jd)
             with st.spinner('Traitement en cours...' if lang_choice == "Français" else 'Processing resume...'):
                 response = get_gemini_response(input_prompt_filled)
