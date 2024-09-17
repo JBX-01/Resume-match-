@@ -4,3 +4,4 @@ python-dotenv
 PyPDF2
 textblob
 scikit-learn
+nltk
